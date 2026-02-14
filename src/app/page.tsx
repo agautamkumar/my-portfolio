@@ -33,8 +33,265 @@ import {
   Users,
   Rocket,
   Chrome,
-  Tv
+  Tv,
+  Inbox,
+  Eye,
+  Calendar,
+  User,
+  Lock,
+  Trash2
 } from 'lucide-react'
+
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
+
+// Types for contact messages
+interface ContactMessage {
+  id: string
+  name: string
+  email: string
+  message: string
+  read: boolean
+  createdAt: string
+}
+
+// Admin Modal Component with Password Protection
+function AdminModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const [messages, setMessages] = useState<ContactMessage[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' })
+  const [loginError, setLoginError] = useState<string | null>(null)
+  const [loggingIn, setLoggingIn] = useState(false)
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoggingIn(true)
+    setLoginError(null)
+    
+    try {
+      // Create Basic Auth header using btoa (browser-compatible)
+      const credentials = btoa(`${loginForm.email}:${loginForm.password}`)
+      
+      const response = await fetch('/api/contact', {
+        headers: {
+          'Authorization': `Basic ${credentials}`
+        }
+      })
+      
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Invalid credentials')
+      }
+      
+      const data = await response.json()
+      setMessages(data.messages || [])
+      setIsAuthenticated(true)
+      setError(null)
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : 'Login failed')
+    } finally {
+      setLoggingIn(false)
+    }
+  }
+
+  const fetchMessages = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const credentials = btoa(`${loginForm.email}:${loginForm.password}`)
+      const response = await fetch('/api/contact', {
+        headers: {
+          'Authorization': `Basic ${credentials}`
+        }
+      })
+      if (!response.ok) throw new Error('Failed to fetch messages')
+      const data = await response.json()
+      setMessages(data.messages || [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load messages')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!open) {
+      setIsAuthenticated(false)
+      setMessages([])
+      setLoginForm({ email: '', password: '' })
+      setLoginError(null)
+      setError(null)
+    }
+  }, [open])
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  const handleLogout = () => {
+    setIsAuthenticated(false)
+    setMessages([])
+    setLoginForm({ email: '', password: '' })
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Lock className="w-5 h-5 text-emerald-400" />
+            {isAuthenticated ? 'Message Inbox' : 'Admin Login'}
+          </DialogTitle>
+          <DialogDescription>
+            {isAuthenticated 
+              ? `View all contact form submissions (${messages.length} messages)`
+              : 'Enter your credentials to access the admin panel'
+            }
+          </DialogDescription>
+        </DialogHeader>
+        
+        {!isAuthenticated ? (
+          // Login Form
+          <form onSubmit={handleLogin} className="space-y-4 py-4">
+            {loginError && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center gap-2">
+                <X className="w-4 h-4" />
+                {loginError}
+              </div>
+            )}
+            <div className="space-y-2">
+              <label htmlFor="admin-email" className="text-sm font-medium">Email</label>
+              <Input
+                id="admin-email"
+                type="email"
+                placeholder="admin@example.com"
+                value={loginForm.email}
+                onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                required
+                className="bg-muted/50"
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="admin-password" className="text-sm font-medium">Password</label>
+              <Input
+                id="admin-password"
+                type="password"
+                placeholder="••••••••"
+                value={loginForm.password}
+                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                required
+                className="bg-muted/50"
+              />
+            </div>
+            <Button 
+              type="submit" 
+              className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white"
+              disabled={loggingIn}
+            >
+              {loggingIn ? (
+                <span className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  Authenticating...
+                </span>
+              ) : (
+                <>
+                  <Lock className="w-4 h-4 mr-2" />
+                  Login
+                </>
+              )}
+            </Button>
+          </form>
+        ) : (
+          // Messages View
+          <ScrollArea className="h-[60vh] pr-4">
+            <div className="flex justify-end mb-4">
+              <Button variant="outline" size="sm" onClick={handleLogout}>
+                <X className="w-4 h-4 mr-1" />
+                Logout
+              </Button>
+            </div>
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin"></div>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+                  <X className="w-6 h-6 text-red-400" />
+                </div>
+                <p className="text-red-400">{error}</p>
+                <Button variant="outline" size="sm" className="mt-4" onClick={fetchMessages}>
+                  Try Again
+                </Button>
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <Inbox className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="font-semibold mb-1">No messages yet</h3>
+                <p className="text-muted-foreground text-sm">Messages will appear here when someone contacts you</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {messages.map((msg) => (
+                  <Card key={msg.id} className={`bg-muted/30 border-border hover:border-emerald-500/30 transition-all duration-300 ${!msg.read ? 'border-l-2 border-l-emerald-500' : ''}`}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-grow min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <User className="w-4 h-4 text-emerald-400" />
+                            <span className="font-semibold">{msg.name}</span>
+                            {!msg.read && (
+                              <Badge variant="secondary" className="text-xs bg-emerald-500/20 text-emerald-400">New</Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                            <Mail className="w-3 h-3" />
+                            <a href={`mailto:${msg.email}`} className="hover:text-emerald-400 transition-colors">
+                              {msg.email}
+                            </a>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+                            <Calendar className="w-3 h-3" />
+                            {formatDate(msg.createdAt)}
+                          </div>
+                          <p className="text-sm bg-background/50 p-3 rounded-lg border border-border">
+                            {msg.message}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="text-xs"
+                          onClick={() => window.location.href = `mailto:${msg.email}`}
+                        >
+                          <Mail className="w-3 h-3 mr-1" />
+                          Reply
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 // Custom hook for scroll-triggered animations
 function useScrollAnimation(threshold = 0.1) {
@@ -979,17 +1236,38 @@ function ContactSection() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
 
+  const [error, setError] = useState<string | null>(null)
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
-    // Simulate form submission
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    setIsSubmitting(false)
-    setIsSubmitted(true)
-    setFormData({ name: '', email: '', message: '' })
-    
-    // Reset success message after 3 seconds
-    setTimeout(() => setIsSubmitted(false), 3000)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send message')
+      }
+
+      setIsSubmitted(true)
+      setFormData({ name: '', email: '', message: '' })
+
+      // Reset success message after 5 seconds
+      setTimeout(() => setIsSubmitted(false), 5000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send message. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -1070,6 +1348,15 @@ function ContactSection() {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  {/* Error Message */}
+                  {error && (
+                    <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center gap-2 animate-fade-in-up">
+                      <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                        <X className="w-3 h-3" />
+                      </div>
+                      {error}
+                    </div>
+                  )}
                   <div className="group">
                     <label htmlFor="name" className="text-sm font-medium mb-2 block group-hover:text-emerald-400 transition-colors">Name</label>
                     <Input
@@ -1134,7 +1421,7 @@ function ContactSection() {
 }
 
 // Footer Component
-function Footer() {
+function Footer({ onOpenAdmin }: { onOpenAdmin: () => void }) {
   return (
     <footer className="border-t border-border bg-muted/30 py-8 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-transparent to-teal-500/5 -z-10"></div>
@@ -1151,7 +1438,14 @@ function Footer() {
             © {new Date().getFullYear()} All rights reserved. Built with{' '}
             <span className="text-emerald-400">React</span> & <span className="text-teal-400">Next.js</span>
           </div>
-          <div className="flex gap-4">
+          <div className="flex gap-4 items-center">
+            <button 
+              onClick={onOpenAdmin}
+              className="text-sm text-muted-foreground hover:text-emerald-400 transition-colors flex items-center gap-1"
+            >
+              <Lock className="w-3 h-3" />
+              Admin
+            </button>
             <a href="#" className="text-sm text-muted-foreground hover:text-emerald-400 transition-colors">Privacy</a>
             <a href="#" className="text-sm text-muted-foreground hover:text-emerald-400 transition-colors">Terms</a>
           </div>
@@ -1163,6 +1457,8 @@ function Footer() {
 
 // Main Page Component
 export default function Home() {
+  const [isAdminOpen, setIsAdminOpen] = useState(false)
+
   return (
     <main className="min-h-screen flex flex-col bg-background text-foreground">
       <Navigation />
@@ -1173,7 +1469,8 @@ export default function Home() {
       <ProjectsSection />
       <EducationSection />
       <ContactSection />
-      <Footer />
+      <Footer onOpenAdmin={() => setIsAdminOpen(true)} />
+      <AdminModal open={isAdminOpen} onOpenChange={setIsAdminOpen} />
     </main>
   )
 }
